@@ -3,40 +3,37 @@ import { useState } from "react";
 function App() {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
-  const [symbol, setSymbol] = useState("");
   const [result, setResult] = useState(null);
-  const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // ✅ Backend API (Render)
   const API_BASE = import.meta.env.VITE_API_URL;
+  console.log("API BASE:", API_BASE);
 
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
     setFile(selected);
     setResult(null);
     setError("");
-    setNews([]);
 
     if (selected) {
       setPreview(URL.createObjectURL(selected));
     }
   };
 
-  const handleAnalyze = async () => {
+  const handleUpload = async () => {
     if (!file) {
-      alert("Please upload a chart image");
+      setError("Please upload a chart image");
       return;
     }
 
     setLoading(true);
     setError("");
     setResult(null);
-    setNews([]);
 
     const formData = new FormData();
     formData.append("chart", file);
-    if (symbol) formData.append("symbol", symbol);
 
     try {
       const res = await fetch(`${API_BASE}/api/analyze`, {
@@ -44,38 +41,23 @@ function App() {
         body: formData
       });
 
-      const data = await res.json();
-
-      if (data.error) {
-        setError(data.error);
-      } else {
-        setResult(data);
-        fetchNews(symbol);
+      if (!res.ok) {
+        throw new Error("Backend connection failed");
       }
+
+      const data = await res.json();
+      setResult(data);
     } catch (err) {
-      setError("Backend connection failed");
+      setError("❌ Backend connection failed");
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchNews = async (symbol) => {
-    if (!symbol) return;
-
-    try {
-      const res = await fetch(`${API_BASE}/api/news/${symbol}`);
-      const data = await res.json();
-      setNews(data.articles || []);
-    } catch {
-      console.log("News fetch failed");
-    }
-  };
-
-  const verdictColor = (v) => {
-    if (v === "BUY") return "green";
-    if (v === "SELL") return "red";
-    if (v === "HOLD") return "#f4b400"; // yellow
-    return "#fff";
+  const verdictColor = {
+    BUY: "#22c55e",
+    SELL: "#ef4444",
+    HOLD: "#facc15"
   };
 
   return (
@@ -86,9 +68,10 @@ function App() {
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
-        background: "radial-gradient(circle at top, #020617, #000)",
-        color: "#fff",
-        fontFamily: "Arial"
+        background:
+          "radial-gradient(circle at top, rgb(2,6,23), rgb(0,0,0))",
+        color: "white",
+        fontFamily: "Arial, sans-serif"
       }}
     >
       <div
@@ -96,62 +79,54 @@ function App() {
           maxWidth: "520px",
           width: "90%",
           padding: "30px",
-          background: "#020617",
+          background: "rgb(2,6,23)",
           borderRadius: "16px",
           textAlign: "center",
-          boxShadow: "0 0 40px rgba(25, 43, 109, 0.7)"
+          boxShadow: "0 0 40px rgba(25,109,255,0.3)"
         }}
       >
-        <h1>📈 Stock Chart Analyzer</h1>
+        <h1 style={{ marginBottom: "20px" }}>
+          📈 Stock Chart Analyzer
+        </h1>
 
-        <input
-          placeholder="Enter stock symbol (AAPL, TSLA, RELIANCE)"
-          value={symbol}
-          onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-          style={{
-            width: "100%",
-            padding: "10px",
-            margin: "15px 0",
-            borderRadius: "8px",
-            border: "none"
-          }}
-        />
-
+        {/* Upload Box */}
         <div
           style={{
-            border: "2px dashed #475569",
+            border: "2px dashed #64748b",
             padding: "20px",
             borderRadius: "12px",
             marginBottom: "15px"
           }}
         >
-          <input type="file" accept="image/*" onChange={handleFileChange} />
-          <p style={{ color: "#94a3b8" }}>Upload chart image here</p>
+          <input type="file" onChange={handleFileChange} />
+          <p style={{ color: "#94a3b8", marginTop: "10px" }}>
+            Upload chart image here
+          </p>
         </div>
 
+        {/* Preview */}
         {preview && (
           <img
             src={preview}
             alt="preview"
             style={{
               width: "100%",
-              maxHeight: "220px",
-              objectFit: "contain",
-              borderRadius: "8px",
+              borderRadius: "12px",
               marginBottom: "15px"
             }}
           />
         )}
 
+        {/* Button */}
         <button
-          onClick={handleAnalyze}
+          onClick={handleUpload}
           disabled={loading}
           style={{
             width: "100%",
             padding: "14px",
             fontSize: "16px",
             background: "#2563eb",
-            color: "#fff",
+            color: "white",
             border: "none",
             borderRadius: "10px",
             cursor: "pointer"
@@ -160,48 +135,36 @@ function App() {
           {loading ? "Analyzing..." : "Upload & Analyze"}
         </button>
 
-        {error && <p style={{ color: "red" }}>{error}</p>}
-
-        {result && (
-          <div style={{ marginTop: "25px" }}>
-            <p><b>Trend:</b> {result.trend}</p>
-
-            <div
-              style={{
-                height: "10px",
-                background: "#334155",
-                borderRadius: "6px",
-                margin: "10px 0"
-              }}
-            >
-              <div
-                style={{
-                  width: `${result.confidence * 100}%`,
-                  height: "100%",
-                  background: "#22c55e",
-                  borderRadius: "6px"
-                }}
-              />
-            </div>
-
-            <p>
-              <b>Verdict:</b>{" "}
-              <span style={{ color: verdictColor(result.verdict) }}>
-                {result.verdict}
-              </span>
-            </p>
-            <p style={{ color: "#cbd5f5" }}>{result.reason}</p>
-          </div>
+        {/* Error */}
+        {error && (
+          <p style={{ color: "#ef4444", marginTop: "15px" }}>
+            {error}
+          </p>
         )}
 
-        {news.length > 0 && (
-          <div style={{ marginTop: "25px", textAlign: "left" }}>
-            <h3>📰 Latest News</h3>
-            {news.slice(0, 3).map((n, i) => (
-              <p key={i} style={{ fontSize: "14px", color: "#94a3b8" }}>
-                • {n.title}
-              </p>
-            ))}
+        {/* Result */}
+        {result && (
+          <div
+            style={{
+              marginTop: "20px",
+              padding: "15px",
+              borderRadius: "12px",
+              background: "#020617"
+            }}
+          >
+            <h2
+              style={{
+                color: verdictColor[result.verdict],
+                marginBottom: "10px"
+              }}
+            >
+              {result.verdict}
+            </h2>
+            <p>Trend: {result.trend}</p>
+            <p>Confidence: {(result.confidence * 100).toFixed(1)}%</p>
+            <p style={{ marginTop: "8px", color: "#94a3b8" }}>
+              {result.reason}
+            </p>
           </div>
         )}
       </div>
