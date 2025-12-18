@@ -1,0 +1,16 @@
+# Node
+node_modules/
+dist/
+
+# Python
+analyzer/venv/
+__pycache__/
+
+# Backend runtime
+uploads/
+
+# Secrets
+.env
+
+# OS
+.DS_Store
