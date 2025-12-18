@@ -9,6 +9,8 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const API_BASE = import.meta.env.VITE_API_URL;
+
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
     setFile(selected);
@@ -37,19 +39,20 @@ function App() {
     if (symbol) formData.append("symbol", symbol);
 
     try {
-      const res = await fetch("http://localhost:5000/api/analyze", {
+      const res = await fetch(`${API_BASE}/api/analyze`, {
         method: "POST",
         body: formData
       });
 
       const data = await res.json();
+
       if (data.error) {
         setError(data.error);
       } else {
         setResult(data);
         fetchNews(symbol);
       }
-    } catch {
+    } catch (err) {
       setError("Backend connection failed");
     } finally {
       setLoading(false);
@@ -60,9 +63,7 @@ function App() {
     if (!symbol) return;
 
     try {
-      const res = await fetch(
-        `http://localhost:5000/api/news/${symbol}`
-      );
+      const res = await fetch(`${API_BASE}/api/news/${symbol}`);
       const data = await res.json();
       setNews(data.articles || []);
     } catch {
@@ -73,7 +74,7 @@ function App() {
   const verdictColor = (v) => {
     if (v === "BUY") return "green";
     if (v === "SELL") return "red";
-    if (v === "HOLD") return "#f4b400";
+    if (v === "HOLD") return "#f4b400"; // yellow
     return "#fff";
   };
 
@@ -103,9 +104,8 @@ function App() {
       >
         <h1>📈 Stock Chart Analyzer</h1>
 
-        {/* Symbol Input */}
         <input
-          placeholder="Enter stock symbol (AAPL, TSLA)"
+          placeholder="Enter stock symbol (AAPL, TSLA, RELIANCE)"
           value={symbol}
           onChange={(e) => setSymbol(e.target.value.toUpperCase())}
           style={{
@@ -117,7 +117,6 @@ function App() {
           }}
         />
 
-        {/* Upload Box */}
         <div
           style={{
             border: "2px dashed #475569",
@@ -130,7 +129,6 @@ function App() {
           <p style={{ color: "#94a3b8" }}>Upload chart image here</p>
         </div>
 
-        {/* Image Preview */}
         {preview && (
           <img
             src={preview}
@@ -164,12 +162,10 @@ function App() {
 
         {error && <p style={{ color: "red" }}>{error}</p>}
 
-        {/* RESULT */}
         {result && (
           <div style={{ marginTop: "25px" }}>
             <p><b>Trend:</b> {result.trend}</p>
 
-            {/* Confidence Bar */}
             <div
               style={{
                 height: "10px",
@@ -198,7 +194,6 @@ function App() {
           </div>
         )}
 
-        {/* NEWS */}
         {news.length > 0 && (
           <div style={{ marginTop: "25px", textAlign: "left" }}>
             <h3>📰 Latest News</h3>
