@@ -47,6 +47,9 @@ router.post("/", upload.single("chart"), async (req, res) => {
       "analyzer",
       "analyze_chart.py"
     );
+    console.log("SCRIPT PATH:", SCRIPT_PATH);
+    console.log("CWD:", process.cwd());
+
 
     exec(
       `${PYTHON_PATH} "${SCRIPT_PATH}" "${imagePath}"`,
