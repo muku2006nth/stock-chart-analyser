@@ -3,49 +3,50 @@ import multer from "multer";
 import path from "path";
 import { exec } from "child_process";
 import fs from "fs";
-import axios from "axios";
-import Fundamental from "../models/Fundamental.js";
 
 const router = express.Router();
 
-/* ----------------- ENSURE UPLOAD DIR ----------------- */
-const uploadDir = path.resolve(process.cwd(), "backend", "uploads");
+/* ------------------ Ensure uploads folder exists ------------------ */
+const uploadDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+  fs.mkdirSync(uploadDir);
 }
 
-/* ----------------- MULTER CONFIG ----------------- */
+/* ------------------ Multer config ------------------ */
 const storage = multer.diskStorage({
   destination: uploadDir,
   filename: (req, file, cb) => {
-    const uniqueName = `${Date.now()}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
+    cb(null, Date.now() + path.extname(file.originalname));
   }
 });
 
 const upload = multer({ storage });
 
-/* ----------------- ANALYZE ROUTE ----------------- */
+/* ------------------ POST /api/analyze ------------------ */
 router.post("/", upload.single("chart"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: "Chart image missing" });
     }
 
-    const imagePath = path.resolve(uploadDir, req.file.filename);
+    const imagePath = path.join(uploadDir, req.file.filename);
 
-    /* -------- PYTHON (RENDER SAFE) -------- */
-    const PYTHON_BIN = "python3";
-    const SCRIPT_PATH = path.resolve(
+    /**
+     * IMPORTANT (Render):
+     * process.cwd() === /opt/render/project/src/backend
+     * analyzer folder is at /opt/render/project/src/analyzer
+     */
+    const PYTHON_PATH = "python3";
+    const SCRIPT_PATH = path.join(
       process.cwd(),
-      "backend",
+      "..",
       "analyzer",
       "analyze_chart.py"
     );
 
     exec(
-      `${PYTHON_BIN} "${SCRIPT_PATH}" "${imagePath}"`,
-      async (error, stdout, stderr) => {
+      `${PYTHON_PATH} "${SCRIPT_PATH}" "${imagePath}"`,
+      (error, stdout, stderr) => {
         if (error) {
           console.error("Python error:", stderr);
           return res.status(500).json({
@@ -54,96 +55,29 @@ router.post("/", upload.single("chart"), async (req, res) => {
           });
         }
 
-        let chartResult;
+        let result;
         try {
-          chartResult = JSON.parse(stdout);
-        } catch {
+          result = JSON.parse(stdout);
+        } catch (parseErr) {
+          console.error("Invalid Python output:", stdout);
           return res.status(500).json({
             error: "Invalid Python output",
             raw: stdout
           });
         }
 
-        /* -------- INITIAL VERDICT (CHART) -------- */
-        let verdict = "HOLD";
-        let reason = "Neutral market structure";
-        const { trend, confidence } = chartResult;
-
-        if (trend === "Uptrend" && confidence >= 0.6) {
-          verdict = "BUY";
-          reason = "Strong bullish trend detected";
-        } else if (trend === "Downtrend" && confidence >= 0.6) {
-          verdict = "SELL";
-          reason = "Strong bearish trend detected";
-        }
-
-        /* -------- RSI (TWELVE DATA) -------- */
-        const symbol = req.body?.symbol;
-        let rsi = null;
-
-        if (symbol && process.env.TWELVE_DATA_API_KEY) {
-          try {
-            const rsiRes = await axios.get(
-              "https://api.twelvedata.com/rsi",
-              {
-                params: {
-                  symbol: `${symbol}.NSE`,
-                  interval: "1day",
-                  time_period: 14,
-                  apikey: process.env.TWELVE_DATA_API_KEY
-                }
-              }
-            );
-
-            rsi = parseFloat(rsiRes.data?.values?.[0]?.rsi);
-
-            if (!isNaN(rsi)) {
-              if (rsi > 70) {
-                verdict = "SELL";
-                reason = "RSI indicates overbought conditions";
-              } else if (rsi < 30) {
-                verdict = "BUY";
-                reason = "RSI indicates oversold conditions";
-              }
-            }
-          } catch (err) {
-            console.warn("RSI fetch failed");
-          }
-        }
-
-        /* -------- FUNDAMENTALS (MONGO) -------- */
-        let fundamentalScore = 0;
-
-        if (symbol) {
-          const fundamentals = await Fundamental.findOne({ symbol });
-
-          if (fundamentals?.data) {
-            const pe = parseFloat(fundamentals.data.PERatio);
-            const eps = parseFloat(fundamentals.data.EPS);
-
-            if (!isNaN(pe) && pe < 25) fundamentalScore++;
-            if (!isNaN(eps) && eps > 0) fundamentalScore++;
-          }
-        }
-
-        if (verdict === "BUY" && fundamentalScore === 0) {
-          verdict = "HOLD";
-          reason = "Bullish chart, but weak fundamentals";
-        }
-
-        /* -------- FINAL RESPONSE -------- */
         return res.json({
-          trend,
-          confidence,
-          rsi,
-          verdict,
-          reason
+          file: req.file.filename,
+          trend: result.trend,
+          confidence: result.confidence,
+          verdict: result.verdict,
+          reason: result.reason
         });
       }
     );
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Analysis failed" });
+    console.error("Analyze route error:", err);
+    res.status(500).json({ error: "Analysis failed" });
   }
 });
 
