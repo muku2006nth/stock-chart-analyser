@@ -36,6 +36,7 @@ function App() {
     formData.append("chart", file);
 
     try {
+      console.log("API BASE AT RUNTIME =", import.meta.env.VITE_API_URL);
       const res = await fetch(`${API_BASE}/api/analyze`, {
         method: "POST",
         body: formData
