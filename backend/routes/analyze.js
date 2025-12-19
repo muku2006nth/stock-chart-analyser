@@ -1,49 +1,156 @@
 import express from "express";
-import dotenv from "dotenv";
-import cors from "cors";
-import connectDB from "./db.js";
+import multer from "multer";
+import path from "path";
+import { exec } from "child_process";
+import axios from "axios";
+import Fundamental from "../models/Fundamental.js";
+import fs from "fs";
+import { fileURLToPath } from "url";
 
-import analyzeRoute from "./routes/analyze.js";
-import fundamentalsRoute from "./routes/fundamentals.js";
-import newsRoute from "./routes/news.js";
-import technicalsRoute from "./routes/technicals.js";
+/* ---------- PATH FIX (ES MODULES) ---------- */
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-dotenv.config();
+/* ---------- ENSURE UPLOADS FOLDER ---------- */
+const UPLOAD_DIR = path.join(__dirname, "..", "uploads");
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR);
+}
 
-const app = express();
+const router = express.Router();
 
-/* ---------- CORS (VERCEL + LOCAL SAFE) ---------- */
-app.use(
-  cors({
-    origin: "*",
-    methods: ["GET", "POST"],
-    allowedHeaders: ["Content-Type"]
-  })
-);
-
-app.use(express.json());
-
-/* ---------- DB ---------- */
-connectDB();
-
-/* ---------- HEALTH CHECK ---------- */
-app.get("/", (req, res) => {
-  res.send("Stock Analyzer Backend Running");
+/* ---------- MULTER CONFIG ---------- */
+const storage = multer.diskStorage({
+  destination: UPLOAD_DIR,
+  filename: (req, file, cb) => {
+    const uniqueName = `${Date.now()}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
+  }
 });
 
-/* ---------- ROUTES ---------- */
-app.use("/api/analyze", analyzeRoute);
-app.use("/api/fundamentals", fundamentalsRoute);
-app.use("/api/news", newsRoute);
-app.use("/api/technicals", technicalsRoute);
+const upload = multer({ storage });
 
-/* ---------- PORT (RENDER SAFE) ---------- */
-const PORT = process.env.PORT || 5000;
+/* ---------- ANALYZE ROUTE ---------- */
+router.post("/", upload.single("chart"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "Chart image missing" });
+    }
 
-app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-  console.log(
-    "TWELVE DATA API KEY:",
-    process.env.TWELVE_DATA_API_KEY ? "LOADED" : "MISSING"
-  );
+    const imagePath = path.join(UPLOAD_DIR, req.file.filename);
+
+    /* ---------- PYTHON EXEC (RENDER SAFE) ---------- */
+    const PYTHON_PATH = process.env.PYTHON_PATH || "python3";
+    const SCRIPT_PATH = path.join(
+      __dirname,
+      "..",
+      "analyzer",
+      "analyze_chart.py"
+    );
+
+    exec(
+      `"${PYTHON_PATH}" "${SCRIPT_PATH}" "${imagePath}"`,
+      async (error, stdout, stderr) => {
+        if (error) {
+          console.error("Python error:", stderr);
+          return res.status(500).json({
+            error: "Python execution failed",
+            details: stderr
+          });
+        }
+
+        let result;
+        try {
+          result = JSON.parse(stdout);
+        } catch (err) {
+          console.error("Invalid Python output:", stdout);
+          return res.status(500).json({
+            error: "Invalid Python output",
+            raw: stdout
+          });
+        }
+
+        /* ---------- INITIAL VERDICT (CHART) ---------- */
+        let verdict = "HOLD";
+        let reason = "Market conditions are unclear";
+
+        if (result.trend === "Uptrend" && result.confidence >= 0.6) {
+          verdict = "BUY";
+          reason = "Strong uptrend detected from chart pattern";
+        } else if (result.trend === "Downtrend" && result.confidence >= 0.6) {
+          verdict = "SELL";
+          reason = "Strong downtrend detected from chart pattern";
+        }
+
+        /* ---------- RSI (TWELVE DATA) ---------- */
+        const symbol = req.body?.symbol;
+        let rsi = null;
+
+        if (symbol && process.env.TWELVE_DATA_API_KEY) {
+          try {
+            const rsiRes = await axios.get(
+              "https://api.twelvedata.com/rsi",
+              {
+                params: {
+                  symbol: `${symbol}.NSE`,
+                  interval: "1day",
+                  time_period: 14,
+                  apikey: process.env.TWELVE_DATA_API_KEY
+                }
+              }
+            );
+
+            rsi = parseFloat(rsiRes.data?.values?.[0]?.rsi);
+
+            if (!isNaN(rsi)) {
+              if (rsi > 70) {
+                verdict = "SELL";
+                reason = "RSI indicates overbought conditions";
+              } else if (rsi < 30) {
+                verdict = "BUY";
+                reason = "RSI indicates oversold conditions";
+              }
+            }
+          } catch (err) {
+            console.warn("RSI fetch failed");
+          }
+        }
+
+        /* ---------- FUNDAMENTALS ---------- */
+        let fundamentalScore = 0;
+
+        if (symbol) {
+          const fundamentals = await Fundamental.findOne({ symbol });
+
+          if (fundamentals?.data) {
+            const pe = parseFloat(fundamentals.data.PERatio);
+            const eps = parseFloat(fundamentals.data.EPS);
+
+            if (!isNaN(pe) && pe < 25) fundamentalScore++;
+            if (!isNaN(eps) && eps > 0) fundamentalScore++;
+          }
+        }
+
+        if (verdict === "BUY" && fundamentalScore === 0) {
+          verdict = "HOLD";
+          reason = "Technical signals positive, but fundamentals are weak";
+        }
+
+        /* ---------- RESPONSE ---------- */
+        res.json({
+          file: req.file.filename,
+          trend: result.trend,
+          confidence: result.confidence,
+          rsi,
+          verdict,
+          reason
+        });
+      }
+    );
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Analysis failed" });
+  }
 });
+
+export default router;
