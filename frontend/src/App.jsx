@@ -1,15 +1,15 @@
 import { useState } from "react";
 
 function App() {
+  const [symbol, setSymbol] = useState("");
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // 🔥 HARD-CODED BACKEND (Render)
+  // ✅ HARD-CODED BACKEND (Render)
   const API_BASE = "https://stock-analyser-backend-yx4e.onrender.com";
-  console.log("API BASE (HARDCODED):", API_BASE);
 
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
@@ -23,6 +23,11 @@ function App() {
   };
 
   const handleUpload = async () => {
+    if (!symbol.trim()) {
+      setError("Please enter a stock symbol (e.g. HDFC)");
+      return;
+    }
+
     if (!file) {
       setError("Please upload a chart image");
       return;
@@ -34,6 +39,7 @@ function App() {
 
     const formData = new FormData();
     formData.append("chart", file);
+    formData.append("symbol", symbol);
 
     try {
       const res = await fetch(`${API_BASE}/api/analyze`, {
@@ -42,7 +48,7 @@ function App() {
       });
 
       if (!res.ok) {
-        throw new Error("Backend connection failed");
+        throw new Error("Backend error");
       }
 
       const data = await res.json();
@@ -90,6 +96,24 @@ function App() {
           📈 Stock Chart Analyzer
         </h1>
 
+        {/* ✅ STOCK SYMBOL INPUT (THIS WAS MISSING) */}
+        <input
+          type="text"
+          placeholder="Enter stock symbol (e.g. HDFC, TCS)"
+          value={symbol}
+          onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+          style={{
+            width: "100%",
+            padding: "12px",
+            marginBottom: "15px",
+            borderRadius: "10px",
+            border: "none",
+            outline: "none",
+            fontSize: "16px"
+          }}
+        />
+
+        {/* Upload Box */}
         <div
           style={{
             border: "2px dashed #64748b",
@@ -104,6 +128,7 @@ function App() {
           </p>
         </div>
 
+        {/* Preview */}
         {preview && (
           <img
             src={preview}
@@ -116,6 +141,7 @@ function App() {
           />
         )}
 
+        {/* Button */}
         <button
           onClick={handleUpload}
           disabled={loading}
@@ -133,12 +159,14 @@ function App() {
           {loading ? "Analyzing..." : "Upload & Analyze"}
         </button>
 
+        {/* Error */}
         {error && (
           <p style={{ color: "#ef4444", marginTop: "15px" }}>
             {error}
           </p>
         )}
 
+        {/* Result */}
         {result && (
           <div
             style={{
