@@ -7,9 +7,9 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ✅ Backend API (Render)
-  const API_BASE = import.meta.env.VITE_API_URL;
-  console.log("API BASE:", API_BASE);
+  // 🔥 HARD-CODED BACKEND (Render)
+  const API_BASE = "https://stock-analyser-backend-yx4e.onrender.com";
+  console.log("API BASE (HARDCODED):", API_BASE);
 
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
@@ -36,7 +36,6 @@ function App() {
     formData.append("chart", file);
 
     try {
-      console.log("API BASE AT RUNTIME =", import.meta.env.VITE_API_URL);
       const res = await fetch(`${API_BASE}/api/analyze`, {
         method: "POST",
         body: formData
@@ -49,6 +48,7 @@ function App() {
       const data = await res.json();
       setResult(data);
     } catch (err) {
+      console.error(err);
       setError("❌ Backend connection failed");
     } finally {
       setLoading(false);
@@ -90,7 +90,6 @@ function App() {
           📈 Stock Chart Analyzer
         </h1>
 
-        {/* Upload Box */}
         <div
           style={{
             border: "2px dashed #64748b",
@@ -105,7 +104,6 @@ function App() {
           </p>
         </div>
 
-        {/* Preview */}
         {preview && (
           <img
             src={preview}
@@ -118,7 +116,6 @@ function App() {
           />
         )}
 
-        {/* Button */}
         <button
           onClick={handleUpload}
           disabled={loading}
@@ -136,14 +133,12 @@ function App() {
           {loading ? "Analyzing..." : "Upload & Analyze"}
         </button>
 
-        {/* Error */}
         {error && (
           <p style={{ color: "#ef4444", marginTop: "15px" }}>
             {error}
           </p>
         )}
 
-        {/* Result */}
         {result && (
           <div
             style={{
