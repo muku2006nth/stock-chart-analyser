@@ -8,54 +8,37 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ✅ HARD-CODED BACKEND (Render)
   const API_BASE = "https://stock-analyser-backend-yx4e.onrender.com";
 
-  const handleFileChange = (e) => {
-    const selected = e.target.files[0];
-    setFile(selected);
+  const handleFileChange = e => {
+    const f = e.target.files[0];
+    setFile(f);
+    setPreview(f ? URL.createObjectURL(f) : null);
     setResult(null);
     setError("");
-
-    if (selected) {
-      setPreview(URL.createObjectURL(selected));
-    }
   };
 
   const handleUpload = async () => {
-    if (!symbol.trim()) {
-      setError("Please enter a stock symbol (e.g. HDFC)");
-      return;
-    }
-
-    if (!file) {
-      setError("Please upload a chart image");
-      return;
-    }
+    if (!file) return setError("Upload a chart image");
 
     setLoading(true);
     setError("");
     setResult(null);
 
-    const formData = new FormData();
-    formData.append("chart", file);
-    formData.append("symbol", symbol);
+    const fd = new FormData();
+    fd.append("chart", file);
+    if (symbol) fd.append("symbol", symbol);
 
     try {
       const res = await fetch(`${API_BASE}/api/analyze`, {
         method: "POST",
-        body: formData
+        body: fd
       });
 
-      if (!res.ok) {
-        throw new Error("Backend error");
-      }
-
-      const data = await res.json();
-      setResult(data);
-    } catch (err) {
-      console.error(err);
-      setError("❌ Backend connection failed");
+      if (!res.ok) throw new Error();
+      setResult(await res.json());
+    } catch {
+      setError("Backend connection failed");
     } finally {
       setLoading(false);
     }
@@ -68,132 +51,149 @@ function App() {
   };
 
   return (
-    <div
-      style={{
-        width: "100vw",
-        minHeight: "100vh",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        background:
-          "radial-gradient(circle at top, rgb(2,6,23), rgb(0,0,0))",
-        color: "white",
-        fontFamily: "Arial, sans-serif"
-      }}
-    >
-      <div
-        style={{
-          maxWidth: "520px",
-          width: "90%",
-          padding: "30px",
-          background: "rgb(2,6,23)",
-          borderRadius: "16px",
-          textAlign: "center",
-          boxShadow: "0 0 40px rgba(25,109,255,0.3)"
-        }}
-      >
-        <h1 style={{ marginBottom: "20px" }}>
-          📈 Stock Chart Analyzer
-        </h1>
+    <div style={styles.page}>
+      <div style={styles.card}>
+        <h1>📈 Stock Chart Analyzer</h1>
 
-        {/* ✅ STOCK SYMBOL INPUT (THIS WAS MISSING) */}
         <input
-          type="text"
-          placeholder="Enter stock symbol (e.g. HDFC, TCS)"
+          placeholder="Stock symbol (eg: HDFC)"
           value={symbol}
-          onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-          style={{
-            width: "100%",
-            padding: "12px",
-            marginBottom: "15px",
-            borderRadius: "10px",
-            border: "none",
-            outline: "none",
-            fontSize: "16px"
-          }}
+          onChange={e => setSymbol(e.target.value)}
+          style={styles.input}
         />
 
-        {/* Upload Box */}
-        <div
-          style={{
-            border: "2px dashed #64748b",
-            padding: "20px",
-            borderRadius: "12px",
-            marginBottom: "15px"
-          }}
-        >
+        <div style={styles.uploadBox}>
           <input type="file" onChange={handleFileChange} />
-          <p style={{ color: "#94a3b8", marginTop: "10px" }}>
-            Upload chart image here
-          </p>
+          <p>Upload chart image here</p>
         </div>
 
-        {/* Preview */}
-        {preview && (
-          <img
-            src={preview}
-            alt="preview"
-            style={{
-              width: "100%",
-              borderRadius: "12px",
-              marginBottom: "15px"
-            }}
-          />
-        )}
+        {preview && <img src={preview} style={styles.preview} />}
 
-        {/* Button */}
-        <button
-          onClick={handleUpload}
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: "14px",
-            fontSize: "16px",
-            background: "#2563eb",
-            color: "white",
-            border: "none",
-            borderRadius: "10px",
-            cursor: "pointer"
-          }}
-        >
+        <button onClick={handleUpload} disabled={loading} style={styles.button}>
           {loading ? "Analyzing..." : "Upload & Analyze"}
         </button>
 
-        {/* Error */}
-        {error && (
-          <p style={{ color: "#ef4444", marginTop: "15px" }}>
-            {error}
-          </p>
-        )}
+        {error && <p style={{ color: "#ef4444" }}>{error}</p>}
 
-        {/* Result */}
         {result && (
-          <div
-            style={{
-              marginTop: "20px",
-              padding: "15px",
-              borderRadius: "12px",
-              background: "#020617"
-            }}
-          >
-            <h2
+          <div style={{ marginTop: 20 }}>
+            <div
               style={{
-                color: verdictColor[result.verdict],
-                marginBottom: "10px"
+                ...styles.badge,
+                background: verdictColor[result.verdict]
               }}
             >
               {result.verdict}
-            </h2>
+            </div>
+
             <p>Trend: {result.trend}</p>
-            <p>Confidence: {(result.confidence * 100).toFixed(1)}%</p>
-            <p style={{ marginTop: "8px", color: "#94a3b8" }}>
-              {result.reason}
-            </p>
+
+            {/* Confidence bar */}
+            <div style={styles.barWrap}>
+              <div
+                style={{
+                  ...styles.bar,
+                  width: `${result.confidence * 100}%`,
+                  background: verdictColor[result.verdict]
+                }}
+              />
+            </div>
+
+            <p>{(result.confidence * 100).toFixed(1)}% confidence</p>
+            <p style={{ color: "#94a3b8" }}>{result.reason}</p>
+
+            {result.news?.length > 0 && (
+              <div style={{ textAlign: "left", marginTop: 15 }}>
+                <h3>📰 Latest News</h3>
+                {result.news.map((n, i) => (
+                  <a
+                    key={i}
+                    href={n.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={styles.news}
+                  >
+                    • {n.title} ({n.source})
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
     </div>
   );
 }
+
+/* ---------- styles ---------- */
+const styles = {
+  page: {
+    minHeight: "100vh",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    background: "radial-gradient(circle, #020617, #000)",
+    color: "white"
+  },
+  card: {
+    width: "90%",
+    maxWidth: 520,
+    padding: 30,
+    borderRadius: 16,
+    background: "#020617",
+    boxShadow: "0 0 40px rgba(37,99,235,.4)",
+    textAlign: "center"
+  },
+  input: {
+    width: "100%",
+    padding: 12,
+    borderRadius: 8,
+    border: "none",
+    marginBottom: 10
+  },
+  uploadBox: {
+    border: "2px dashed #64748b",
+    padding: 20,
+    borderRadius: 12
+  },
+  preview: {
+    width: "100%",
+    borderRadius: 12,
+    marginTop: 10
+  },
+  button: {
+    width: "100%",
+    padding: 14,
+    marginTop: 15,
+    borderRadius: 10,
+    border: "none",
+    background: "#2563eb",
+    color: "white",
+    fontSize: 16
+  },
+  badge: {
+    padding: "8px 16px",
+    borderRadius: 999,
+    display: "inline-block",
+    fontWeight: "bold"
+  },
+  barWrap: {
+    height: 10,
+    background: "#1e293b",
+    borderRadius: 6,
+    overflow: "hidden",
+    marginTop: 6
+  },
+  bar: {
+    height: "100%",
+    transition: "width .8s ease"
+  },
+  news: {
+    display: "block",
+    color: "#60a5fa",
+    textDecoration: "none",
+    marginBottom: 6
+  }
+};
 
 export default App;
