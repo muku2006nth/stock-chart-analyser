@@ -31,11 +31,9 @@ router.post("/", upload.single("chart"), async (req, res) => {
 
     const imagePath = path.resolve(uploadDir, req.file.filename);
 
-    // ✅ CORRECT SCRIPT PATH (THIS FIXES EVERYTHING)
+    // ✅ PYTHON FILE INSIDE BACKEND
     const SCRIPT_PATH = path.resolve(
       process.cwd(),
-      "..",
-      "analyzer",
       "analyze_chart.py"
     );
 
@@ -56,7 +54,7 @@ router.post("/", upload.single("chart"), async (req, res) => {
         let result;
         try {
           result = JSON.parse(stdout);
-        } catch (e) {
+        } catch {
           return res.status(500).json({
             error: "Invalid Python output",
             raw: stdout
@@ -66,8 +64,8 @@ router.post("/", upload.single("chart"), async (req, res) => {
         res.json({
           trend: result.trend,
           confidence: result.confidence,
-          verdict: result.verdict ?? "HOLD",
-          reason: result.reason ?? "Analysis completed"
+          verdict: result.verdict,
+          reason: result.reason
         });
       }
     );
