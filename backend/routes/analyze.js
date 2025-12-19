@@ -31,7 +31,7 @@ router.post("/", upload.single("chart"), async (req, res) => {
 
     const imagePath = path.resolve(uploadDir, req.file.filename);
 
-    // ✅ PYTHON FILE INSIDE BACKEND
+    // Python script placed directly inside backend/
     const SCRIPT_PATH = path.resolve(
       process.cwd(),
       "analyze_chart.py"
@@ -54,23 +54,36 @@ router.post("/", upload.single("chart"), async (req, res) => {
         let result;
         try {
           result = JSON.parse(stdout);
-        } catch {
+        } catch (err) {
+          console.error("Invalid Python output:", stdout);
           return res.status(500).json({
             error: "Invalid Python output",
             raw: stdout
           });
         }
 
-        res.json({
-          trend: result.trend,
-          confidence: result.confidence,
-          verdict: result.verdict,
-          reason: result.reason
+        /* ---------- SAFE DEFAULTS ---------- */
+        const trend = result.trend || "Unknown";
+        const confidence = Number(result.confidence) || 0;
+        const verdict = result.verdict || "HOLD";
+        const reason =
+          result.reason || "Insufficient data to determine verdict";
+
+        /* ---------- OPTIONAL NEWS (placeholder) ---------- */
+        const news = result.news || [];
+
+        /* ---------- FINAL RESPONSE ---------- */
+        return res.json({
+          trend,
+          confidence,
+          verdict,
+          reason,
+          news
         });
       }
     );
   } catch (err) {
-    console.error(err);
+    console.error("Analyze route failed:", err);
     res.status(500).json({ error: "Analysis failed" });
   }
 });
