@@ -23,6 +23,10 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 /* ------------------ POST /api/analyze ------------------ */
+router.get("/", (req, res) => {
+  res.json({ status: "Analyze API is alive" });
+});
+
 router.post("/", upload.single("chart"), async (req, res) => {
   try {
     if (!req.file) {
